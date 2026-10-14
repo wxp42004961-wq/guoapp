@@ -9,6 +9,7 @@ class PlaybackPreferences {
     this.autoAdvance = true,
     this.danmaku = true,
     this.preload = true,
+    this.hardwareDecoding = true,
     this.enhancement = const VideoEnhancementPreferences(),
   });
 
@@ -17,6 +18,7 @@ class PlaybackPreferences {
   final bool autoAdvance;
   final bool danmaku;
   final bool preload;
+  final bool hardwareDecoding;
   final VideoEnhancementPreferences enhancement;
 
   PlaybackPreferences copyWith({
@@ -25,6 +27,7 @@ class PlaybackPreferences {
     bool? autoAdvance,
     bool? danmaku,
     bool? preload,
+    bool? hardwareDecoding,
     VideoEnhancementPreferences? enhancement,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
@@ -32,6 +35,7 @@ class PlaybackPreferences {
     autoAdvance: autoAdvance ?? this.autoAdvance,
     danmaku: danmaku ?? this.danmaku,
     preload: preload ?? this.preload,
+    hardwareDecoding: hardwareDecoding ?? this.hardwareDecoding,
     enhancement: enhancement ?? this.enhancement,
   );
 
@@ -41,6 +45,7 @@ class PlaybackPreferences {
     'autoAdvance': autoAdvance,
     'danmaku': danmaku,
     'preload': preload,
+    'hardwareDecoding': hardwareDecoding,
     'enhancement': enhancement.toJson(),
   };
 
@@ -59,6 +64,7 @@ class PlaybackPreferences {
       autoAdvance: autoAdvance,
       danmaku: danmaku,
       preload: preload,
+      hardwareDecoding: value['hardwareDecoding'] as bool? ?? true,
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
     );
   }

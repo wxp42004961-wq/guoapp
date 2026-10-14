@@ -77,6 +77,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final PlaybackLoader _loader;
   late final PlaybackPreloader _preloader;
   bool _preloadEnabled = true;
+  bool _hardwareDecoding = true;
+  bool _decoderSwitching = false;
   late final DanmakuController _danmaku;
   int _seekSequence = 0;
   bool _danmakuEnabled = true;
@@ -150,6 +152,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     autoAdvance: _autoAdvance,
     danmaku: _danmakuEnabled,
     preload: _preloadEnabled,
+    hardwareDecoding: _hardwareDecoding,
     enhancement: _enhancement.preferences,
   );
   String get _qualityLabel => _plan?.local == true
@@ -175,6 +178,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _autoAdvance = preferences.autoAdvance;
     _danmakuEnabled = preferences.danmaku;
     _preloadEnabled = preferences.preload;
+    _hardwareDecoding = preferences.hardwareDecoding;
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
     _danmaku = DanmakuController(widget.repository)
@@ -1003,7 +1007,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (platform is NativePlayer) {
           if (Platform.isAndroid) {
             if (_television) {
-              await platform.setProperty('hwdec', 'mediacodec-copy');
+              await platform.setProperty(
+                'hwdec',
+                _hardwareDecoding ? 'mediacodec-copy' : 'no',
+              );
               await platform.setProperty('hwdec-codecs', 'all');
               await platform.setProperty('scale', 'bilinear');
               await platform.setProperty('cscale', 'bilinear');
@@ -1014,7 +1021,10 @@ class _PlayerScreenState extends State<PlayerScreen>
               await platform.setProperty('demuxer-max-back-bytes', '${4 * 1024 * 1024}');
               await platform.setProperty('demuxer-readahead-secs', '20');
             } else {
-              await platform.setProperty('hwdec', 'auto-safe');
+              await platform.setProperty(
+                'hwdec',
+                _hardwareDecoding ? 'auto-safe' : 'no',
+              );
               await platform.setProperty('hwdec-codecs', 'all');
               await platform.setProperty('vd-lavc-skiploopfilter', 'nonkey');
               await platform.setProperty('vd-lavc-threads', '4');
@@ -1192,6 +1202,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch)
       return;
     final qualityChanged = nextPreferences.quality != _requestedQuality;
+    final decoderChanged = nextPreferences.hardwareDecoding != _hardwareDecoding;
     _enhancement.setPreferences(nextPreferences.enhancement);
     setState(() {
       _speed = nextPreferences.speed;
@@ -1199,15 +1210,31 @@ class _PlayerScreenState extends State<PlayerScreen>
       _autoAdvance = nextPreferences.autoAdvance;
       _danmakuEnabled = nextPreferences.danmaku;
       _preloadEnabled = nextPreferences.preload;
+      _hardwareDecoding = nextPreferences.hardwareDecoding;
     });
     _danmaku.setEnabled(_danmakuEnabled);
     _syncDanmaku();
-    if (qualityChanged) _preloader.clear();
+    if (qualityChanged || decoderChanged) _preloader.clear();
     _syncPreload();
     _menuRevision.value++;
-    await _interactions.applySpeed();
-    if (qualityChanged && _plan?.local != true) {
+    if (decoderChanged || qualityChanged && _plan?.local != true) {
       await _retry(quality: nextPreferences.quality);
+    } else {
+      await _interactions.applySpeed();
+    }
+  }
+
+  Future<void> _toggleDecoder() async {
+    if (_closed || _decoderSwitching || _player is LunaExoPlayer) return;
+    setState(() => _decoderSwitching = true);
+    try {
+      await _setPreferences(
+        _preferences.copyWith(hardwareDecoding: !_hardwareDecoding),
+      );
+    } catch (_) {
+      _notice('解码方式切换失败，请重试');
+    } finally {
+      if (mounted && !_closed) setState(() => _decoderSwitching = false);
     }
   }
 
@@ -1304,6 +1331,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               danmakuStatus: _danmaku.status,
               onRetryDanmaku: _danmaku.canRetry ? _danmaku.retry : null,
               preloadStatus: _preloader.status,
+              showDecoderSelection: Platform.isAndroid && _player is! LunaExoPlayer,
               enhancement: _enhancementForUi,
               onCompareEnhancement: () {
                 unawaited(_enhancement.toggleCompare());
@@ -1404,6 +1432,8 @@ class _PlayerScreenState extends State<PlayerScreen>
               danmakuStatus: _danmaku.status,
               onRetryDanmaku: _danmaku.canRetry ? _danmaku.retry : null,
               preload: _preloadEnabled,
+              hardwareDecoding: _hardwareDecoding,
+              showDecoderSelection: Platform.isAndroid && _player is! LunaExoPlayer,
               preloadStatus: _preloader.status,
               enhancement: _enhancementForUi,
               onCompareEnhancement: () {
@@ -1423,9 +1453,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         _preferences.copyWith(
           speed: selection.speed,
           quality: selection.quality,
-          autoAdvance: true,
+          autoAdvance: selection.autoAdvance,
           danmaku: selection.danmaku,
-          preload: true,
+          preload: selection.preload,
+          hardwareDecoding: selection.hardwareDecoding,
           enhancement: selection.enhancement,
         ),
       );
@@ -1654,6 +1685,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                 : null,
             onEpisodes: () => _televisionEpisodes(context),
             onSettings: () => _televisionSettings(context),
+            hardwareDecoding: _hardwareDecoding,
+            onToggleDecoder: Platform.isAndroid && _player is! LunaExoPlayer
+                ? () => unawaited(_toggleDecoder())
+                : null,
             onBack: _back,
           )
         : PlayerControls(
@@ -1744,6 +1779,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                         const CircularProgressIndicator(),
                         const SizedBox(height: 16),
                         Text(_loadingMessage),
+                        if (Platform.isAndroid && _player is! LunaExoPlayer)
+                          TextButton(
+                            key: const ValueKey('loading-toggle-decoder'),
+                            onPressed: _decoderSwitching ? null : _toggleDecoder,
+                            child: Text(_hardwareDecoding ? '改用软解重试' : '改用硬解重试'),
+                          ),
                       ],
                     ),
                   ),
@@ -1762,6 +1803,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                       alignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        if (Platform.isAndroid && _player is! LunaExoPlayer)
+                          TextButton(
+                            key: const ValueKey('error-toggle-decoder'),
+                            onPressed: _decoderSwitching ? null : _toggleDecoder,
+                            child: Text(_hardwareDecoding ? '改用软解重试' : '改用硬解重试'),
+                          ),
                         FilledButton.tonalIcon(
                           onPressed: () => DiaryService.showDiaryDialog(context),
                           icon: const Icon(Icons.receipt_long_rounded),

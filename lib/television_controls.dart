@@ -27,6 +27,8 @@ class TelevisionControls extends StatefulWidget {
     required this.onEpisodes,
     required this.onSettings,
     required this.onBack,
+    this.hardwareDecoding = true,
+    this.onToggleDecoder,
     this.enhancement,
   });
   final Player player;
@@ -40,6 +42,8 @@ class TelevisionControls extends StatefulWidget {
   final Future<void> Function() onEpisodes;
   final Future<void> Function() onSettings;
   final VoidCallback onBack;
+  final bool hardwareDecoding;
+  final VoidCallback? onToggleDecoder;
   final VideoEnhancementController? enhancement;
 
   @override
@@ -450,6 +454,13 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                                   );
                                 },
                               ),
+                            if (widget.onToggleDecoder != null)
+                              RemoteButton(
+                                key: const ValueKey('tv-toggle-decoder'),
+                                label: widget.hardwareDecoding ? '硬解 → 软解' : '软解 → 硬解',
+                                icon: Icons.memory_rounded,
+                                onPressed: widget.onToggleDecoder,
+                              ),
                             RemoteButton(
                               key: const ValueKey('tv-settings'),
                               label: '播放设置',
@@ -529,6 +540,7 @@ class TelevisionPlaybackSetting {
     this.autoAdvance,
     this.danmaku,
     this.preload,
+    this.hardwareDecoding,
     this.enhancement,
   });
   final double? speed;
@@ -536,6 +548,7 @@ class TelevisionPlaybackSetting {
   final bool? autoAdvance;
   final bool? danmaku;
   final bool? preload;
+  final bool? hardwareDecoding;
   final VideoEnhancementPreferences? enhancement;
 }
 
@@ -554,6 +567,8 @@ class TelevisionSettingsDialog extends StatelessWidget {
     this.onRetryDanmaku,
     this.preload = true,
     this.preloadStatus = '',
+    this.hardwareDecoding = true,
+    this.showDecoderSelection = false,
     this.enhancement,
     this.onCompareEnhancement,
   });
@@ -569,6 +584,8 @@ class TelevisionSettingsDialog extends StatelessWidget {
   final VoidCallback? onRetryDanmaku;
   final bool preload;
   final String preloadStatus;
+  final bool hardwareDecoding;
+  final bool showDecoderSelection;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
 
@@ -582,6 +599,17 @@ class TelevisionSettingsDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (showDecoderSelection) ...[
+              RemoteButton(
+                key: const ValueKey('tv-setting-decoder'),
+                label: hardwareDecoding ? '当前硬解 · 切换软解' : '当前软解 · 切换硬解',
+                onPressed: () => Navigator.pop(
+                  context,
+                  TelevisionPlaybackSetting(hardwareDecoding: !hardwareDecoding),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
             const Text('倍速', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
             Wrap(

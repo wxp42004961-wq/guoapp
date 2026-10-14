@@ -30,6 +30,7 @@ class PlayerMenu extends StatefulWidget {
     this.danmakuStatus = '',
     this.onRetryDanmaku,
     this.preloadStatus = '',
+    this.showDecoderSelection = false,
     this.enhancement,
     this.onCompareEnhancement,
   });
@@ -47,6 +48,7 @@ class PlayerMenu extends StatefulWidget {
   final String danmakuStatus;
   final VoidCallback? onRetryDanmaku;
   final String preloadStatus;
+  final bool showDecoderSelection;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
   final ValueChanged<int> onEpisode;
@@ -264,6 +266,19 @@ class _PlayerMenuState extends State<PlayerMenu> {
           const SizedBox(height: 8),
         ],
         if (all) ...[
+          if (widget.showDecoderSelection)
+            SwitchListTile.adaptive(
+              key: const ValueKey('player-hardware-decoding'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(preferences.hardwareDecoding ? '硬件解码' : '软件解码'),
+              subtitle: const Text('切换后重新加载当前集，保留播放位置'),
+              value: preferences.hardwareDecoding,
+              onChanged: _busy ? null : (value) => _run(
+                () => widget.onPreferences(
+                  preferences.copyWith(hardwareDecoding: value),
+                ),
+              ),
+            ),
           SwitchListTile.adaptive(
             key: const ValueKey('player-preload-enabled'),
             contentPadding: EdgeInsets.zero,
