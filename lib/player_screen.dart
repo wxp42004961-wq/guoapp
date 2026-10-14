@@ -182,7 +182,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     widget.store.addListener(_accessChanged);
     _player =
         widget.playerFactory?.call() ??
-        (Platform.isAndroid
+        (Platform.isAndroid && widget.detail.drama.source != 'hongguo'
             ? LunaExoPlayer()
             : Player(
                 configuration: const PlayerConfiguration(
@@ -190,7 +190,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                   logLevel: MPVLogLevel.error,
                 ),
               ));
-    _video = widget.videoBuilder == null && !Platform.isAndroid
+    _video = widget.videoBuilder == null && _player is! LunaExoPlayer
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(
@@ -1003,16 +1003,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (platform is NativePlayer) {
           if (Platform.isAndroid) {
             if (_television) {
-              await platform.setProperty('hwdec', 'mediacodec');
+              await platform.setProperty('hwdec', 'mediacodec-copy');
               await platform.setProperty('hwdec-codecs', 'all');
-              await platform.setProperty('opengl-pbo', 'yes');
-              await platform.setProperty('video-latency-hacks', 'yes');
               await platform.setProperty('scale', 'bilinear');
               await platform.setProperty('cscale', 'bilinear');
               await platform.setProperty('dscale', 'bilinear');
               await platform.setProperty('correct-downscaling', 'no');
-              await platform.setProperty('vd-lavc-skiploopfilter', 'all');
-              await platform.setProperty('vd-lavc-skipidct', 'all');
               await platform.setProperty('vd-lavc-threads', '2');
               await platform.setProperty('demuxer-max-bytes', '${4 * 1024 * 1024}');
               await platform.setProperty('demuxer-max-back-bytes', '${1 * 1024 * 1024}');

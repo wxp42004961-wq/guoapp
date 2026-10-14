@@ -229,7 +229,10 @@ class LunaExoPlayer implements Player {
 
     try {
       DiaryService.add('[ExoPlayer] c.initialize() 开始 (formatHint=$formatHint)...');
-      await c.initialize();
+      await c.initialize().timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw TimeoutException('视频初始化超时，请重试或换一集'),
+      );
       DiaryService.add(
           '[ExoPlayer] c.initialize() 成功! duration=${c.value.duration}, size=${c.value.size}, isInitialized=${c.value.isInitialized}');
     } catch (e, stack) {
@@ -257,7 +260,10 @@ class LunaExoPlayer implements Player {
           videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
         );
         try {
-          await c.initialize();
+          await c.initialize().timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw TimeoutException('视频初始化超时，请重试或换一集'),
+      );
           formatHint = alternateFormat;
           DiaryService.add('[ExoPlayer] 自愈重试成功! duration=${c.value.duration}');
         } catch (retryErr, retryStack) {
