@@ -96,6 +96,7 @@ class LunaExoPlayer implements Player {
 
   int _openGeneration = 0;
   bool _disposed = false;
+  String? _lastControllerError;
 
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
@@ -125,22 +126,32 @@ class LunaExoPlayer implements Player {
     final myGen = ++_openGeneration;
     _positionPollTimer?.cancel();
 
-    // 切换新节目时，旧控制器先静音/暂停，彻底防止新旧双重音频重叠
     final old = _controller;
+    final oldListener = _valueListener;
+    _controller = null;
+    _valueListener = null;
+    revision.value++;
     if (old != null) {
-      if (_valueListener != null) {
-        try {
-          old.removeListener(_valueListener!);
-        } catch (_) {}
-        _valueListener = null;
-      }
-      try {
-        await old.pause();
-      } catch (_) {}
+      if (oldListener != null) old.removeListener(oldListener);
+      await old.dispose();
     }
+    if (_disposed || myGen != _openGeneration) return;
 
-    state = state.copyWith(completed: false);
+    _lastControllerError = null;
+    state = state.copyWith(
+      completed: false,
+      playing: false,
+      buffering: true,
+      position: Duration.zero,
+      duration: Duration.zero,
+      buffer: Duration.zero,
+    );
     _safeAdd(stream.completedController, false);
+    _safeAdd(stream.playingController, false);
+    _safeAdd(stream.bufferingController, true);
+    _safeAdd(stream.positionController, Duration.zero);
+    _safeAdd(stream.durationController, Duration.zero);
+    _safeAdd(stream.bufferController, Duration.zero);
 
     final Map<String, String> headers = <String, String>{};
     try {
@@ -167,25 +178,33 @@ class LunaExoPlayer implements Player {
 
     // 先导探测：如果尚未显式判定为 HLS，向网络地址快速嗅探前置响应头与内容，智能识别
     if (!isHls && uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 3);
       try {
-        final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
-        final req = await client.getUrl(uri);
+        final req = await client.getUrl(uri).timeout(const Duration(seconds: 3));
         headers.forEach((k, v) => req.headers.set(k, v));
-        req.headers.set('Range', 'bytes=0-512');
-        final resp = await req.close();
+        req.headers.set('Range', 'bytes=0-511');
+        final resp = await req.close().timeout(const Duration(seconds: 3));
         final cType = resp.headers.contentType?.toString().toLowerCase() ?? '';
-        final chunks = await resp.take(1).toList();
-        final firstChunk = chunks.isNotEmpty ? String.fromCharCodes(chunks.first) : '';
-        DiaryService.add('[Sniff] 探测结果: status=${resp.statusCode}, contentType=$cType, prefix=${firstChunk.length > 20 ? firstChunk.substring(0, 20) : firstChunk}');
-        if (cType.contains('mpegurl') || firstChunk.contains('#EXTM3U')) {
+        final chunks = await resp
+            .take(1)
+            .toList()
+            .timeout(const Duration(seconds: 3));
+        final firstChunk = chunks.isEmpty
+            ? ''
+            : String.fromCharCodes(chunks.first.take(512));
+        if (resp.statusCode >= 200 &&
+            resp.statusCode < 300 &&
+            (cType.contains('mpegurl') || firstChunk.contains('#EXTM3U'))) {
           isHls = true;
-          DiaryService.add('[Sniff] 自动识别为 HLS 流，注入 formatHint: VideoFormat.hls');
         }
-        client.close(force: true);
       } catch (e) {
         DiaryService.add('[Sniff] 探测警告 (非致命): $e');
+      } finally {
+        client.close(force: true);
       }
     }
+    if (_disposed || myGen != _openGeneration) return;
 
     VideoFormat? formatHint = isHls ? VideoFormat.hls : null;
 
@@ -197,14 +216,14 @@ class LunaExoPlayer implements Player {
       DiaryService.add('[ExoPlayer] 本地文件播放: $filePath');
       c = VideoPlayerController.file(
         File(filePath),
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
       );
     } else {
       c = VideoPlayerController.networkUrl(
         uri!,
         formatHint: formatHint,
         httpHeaders: headers,
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
       );
     }
 
@@ -216,6 +235,10 @@ class LunaExoPlayer implements Player {
     } catch (e, stack) {
       DiaryService.add('[ExoPlayer] 首次 initialize 失败: $e');
       // 如果首次尝试失败，且为网络视频，则原地使用交替格式（HLS <-> MP4）自愈重试
+      if (_disposed || myGen != _openGeneration) {
+        await c.dispose();
+        return;
+      }
       if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
         final alternateFormat = formatHint == VideoFormat.hls ? null : VideoFormat.hls;
         DiaryService.add('[ExoPlayer] 启动自愈重试，切换格式为 formatHint=$alternateFormat...');
@@ -231,7 +254,7 @@ class LunaExoPlayer implements Player {
           uri,
           formatHint: alternateFormat,
           httpHeaders: retryHeaders,
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
         );
         try {
           await c.initialize();
@@ -266,16 +289,15 @@ class LunaExoPlayer implements Player {
       return;
     }
 
-    if (old != null) {
-      try {
-        await old.dispose();
-      } catch (_) {}
+    try {
+      await c.setVolume(state.volume / 100.0);
+      await c.setPlaybackSpeed(state.rate);
+    } catch (_) {
+      await c.dispose();
+      rethrow;
     }
-
-    if (myGen != _openGeneration) {
-      try {
-        await c.dispose();
-      } catch (_) {}
+    if (_disposed || myGen != _openGeneration) {
+      await c.dispose();
       return;
     }
 
@@ -316,9 +338,7 @@ class LunaExoPlayer implements Player {
     }
 
     if (play) {
-      try {
-        await c.play();
-      } catch (_) {}
+      await c.play();
     }
     revision.value++;
   }
@@ -354,7 +374,14 @@ class LunaExoPlayer implements Player {
       stateChanged = true;
     }
     if (v.hasError) {
-      DiaryService.add('[ExoPlayer] controller error: ${v.errorDescription}');
+      final error = v.errorDescription ?? '播放器发生错误';
+      if (_lastControllerError != error) {
+        _lastControllerError = error;
+        DiaryService.add('[ExoPlayer] controller error: $error');
+        _safeAdd(stream.errorController, error);
+      }
+    } else {
+      _lastControllerError = null;
     }
     final dur = v.duration;
     if (dur > Duration.zero && dur != state.duration) {

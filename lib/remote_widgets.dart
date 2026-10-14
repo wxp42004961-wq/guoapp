@@ -209,7 +209,7 @@ class _RemoteGridState extends State<RemoteGrid> {
     }
   }
 
-  void _focusAt(int index) {
+  Future<void> _focusAt(int index) async {
     final generation = ++_generation;
     _target = widget.itemKeys[index];
     final node = _node(index);
@@ -236,7 +236,7 @@ class _RemoteGridState extends State<RemoteGrid> {
       if (targetOffset != null) {
         final clamped = targetOffset.clamp(0.0, _scroll.position.maxScrollExtent);
         if ((clamped - currentOffset).abs() > 1.0) {
-          _scroll.animateTo(
+          await _scroll.animateTo(
             clamped,
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOutCubic,
@@ -245,6 +245,7 @@ class _RemoteGridState extends State<RemoteGrid> {
       }
     }
 
+    if (!mounted || generation != _generation) return;
     if (node.context != null) {
       node.requestFocus();
       _target = null;
