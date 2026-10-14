@@ -33,7 +33,7 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 
 ### 0.2.76 播放加载修复
 
-Android 红果恢复 media_kit 原有播放链路，使 PlaybackPlan 参数通过现有 NativePlayer 配置接入，避免 ExoPlayer 适配器漏传。VideoController 根据实际播放器类型创建。电视使用适合纹理输出的 mediacodec-copy，移除强制 PBO、低延迟和跳过解码滤镜设置。其他来源的 ExoPlayer 两次初始化均有 20 秒超时。电视测试版仍使用独立包名，仅包含红果。修复基于源码排查，尚需真机确认播放和音画表现。
+Android 红果恢复 media_kit 原有播放链路，使 PlaybackPlan 参数通过现有 NativePlayer 配置接入，避免 ExoPlayer 适配器漏传。VideoController 根据实际播放器类型创建。电视使用适合纹理输出的 mediacodec-copy，移除强制 PBO、低延迟和跳过解码滤镜设置。Android 以音频时钟同步视频、清零播放器音频偏移并禁用音频透传；电视前向缓存上限调整为 16 MiB、后向 4 MiB、预读 20 秒，软件回退线程自动选择。以上为降低不同步风险的配置，不能替代真机测量。其他来源的 ExoPlayer 两次初始化均有 20 秒超时。电视测试版仍使用独立包名，仅包含红果。修复基于源码排查，尚需真机确认播放和音画表现。
 
 ## 使用
 

@@ -1009,10 +1009,10 @@ class _PlayerScreenState extends State<PlayerScreen>
               await platform.setProperty('cscale', 'bilinear');
               await platform.setProperty('dscale', 'bilinear');
               await platform.setProperty('correct-downscaling', 'no');
-              await platform.setProperty('vd-lavc-threads', '2');
-              await platform.setProperty('demuxer-max-bytes', '${4 * 1024 * 1024}');
-              await platform.setProperty('demuxer-max-back-bytes', '${1 * 1024 * 1024}');
-              await platform.setProperty('demuxer-readahead-secs', '5');
+              await platform.setProperty('vd-lavc-threads', '0');
+              await platform.setProperty('demuxer-max-bytes', '${16 * 1024 * 1024}');
+              await platform.setProperty('demuxer-max-back-bytes', '${4 * 1024 * 1024}');
+              await platform.setProperty('demuxer-readahead-secs', '20');
             } else {
               await platform.setProperty('hwdec', 'auto-safe');
               await platform.setProperty('hwdec-codecs', 'all');
@@ -1021,6 +1021,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             }
             await platform.setProperty('vd-lavc-fast', 'yes');
             await platform.setProperty('video-sync', 'audio');
+            await platform.setProperty('audio-delay', '0');
+            await platform.setProperty('audio-spdif', '');
             await platform.setProperty('framedrop', 'vo');
           }
           await platform.setProperty(
